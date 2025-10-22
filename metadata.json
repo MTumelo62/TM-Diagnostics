@@ -1,0 +1,7 @@
+{
+  "name": "TM Car Diagnostics",
+  "description": "A responsive web application that uses Gemini to diagnose car problems based on user descriptions, providing possible causes, recommended solutions, and estimated costs.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}

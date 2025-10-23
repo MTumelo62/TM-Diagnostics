@@ -6,7 +6,7 @@ import DiagnosticCard from './components/DiagnosticCard';
 import Loader from './components/Loader';
 import Sidebar from './components/Sidebar';
 import BottomNav from './components/BottomNav';
-import { WrenchIcon, LightBulbIcon, CheckCircleIcon, CurrencyDollarIcon, BluetoothIcon, CodeIcon, HistoryIcon, MicrophoneIcon, SpeakerWaveIcon, StopCircleIcon } from './components/Icons';
+import { WrenchIcon, LightBulbIcon, CheckCircleIcon, CurrencyDollarIcon, BluetoothIcon, CodeIcon, HistoryIcon, MicrophoneIcon, SpeakerWaveIcon, StopCircleIcon, KeyIcon } from './components/Icons';
 
 // FIX: Define types for Web Bluetooth API
 type BluetoothDevice = any;
@@ -97,7 +97,7 @@ const DiagnosticResults: React.FC<{ report: DiagnosticReport }> = ({ report }) =
 }
 
 // Page Components
-const Dashboard: React.FC<{ onNewReport: (entry: HistoryEntry) => void }> = ({ onNewReport }) => {
+const Dashboard: React.FC<{ onNewReport: (entry: HistoryEntry) => void; apiKey: string | null; }> = ({ onNewReport, apiKey }) => {
     const [problem, setProblem] = useState<string>('');
     const [report, setReport] = useState<DiagnosticReport | null>(null);
     const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -194,10 +194,14 @@ const Dashboard: React.FC<{ onNewReport: (entry: HistoryEntry) => void }> = ({ o
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!apiKey) {
+            setError("API Key not found. Please reload and provide your key.");
+            return;
+        }
         if (!problem.trim()) { setError('Please describe the car problem or read codes from scanner.'); return; }
         setIsLoading(true); setError(null); setReport(null);
         try {
-            const diagnosticReport = await getCarDiagnostic(problem);
+            const diagnosticReport = await getCarDiagnostic(problem, apiKey);
             setReport(diagnosticReport);
             onNewReport({ id: new Date().toISOString(), timestamp: new Date().toLocaleString(), query: problem, report: diagnosticReport });
         } catch (err) { setError(err instanceof Error ? err.message : 'An unknown error occurred.'); } 
@@ -253,7 +257,7 @@ const Dashboard: React.FC<{ onNewReport: (entry: HistoryEntry) => void }> = ({ o
     );
 };
 
-const CodeMeanings: React.FC = () => {
+const CodeMeanings: React.FC<{ apiKey: string | null; }> = ({ apiKey }) => {
     const [code, setCode] = useState<string>('');
     const [result, setResult] = useState<DTCCodeMeaning | null>(null);
     const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -261,10 +265,14 @@ const CodeMeanings: React.FC = () => {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!apiKey) {
+            setError("API Key not found. Please reload and provide your key.");
+            return;
+        }
         if (!code.trim().match(/^[PBUC][0-9A-F]{4}$/i)) { setError('Please enter a valid DTC code (e.g., P0300).'); return; }
         setIsLoading(true); setError(null); setResult(null);
         try {
-            const meaning = await getDTCMeaning(code.trim().toUpperCase());
+            const meaning = await getDTCMeaning(code.trim().toUpperCase(), apiKey);
             setResult(meaning);
         } catch (err) { setError(err instanceof Error ? err.message : 'An unknown error occurred.'); } 
         finally { setIsLoading(false); }
@@ -342,13 +350,41 @@ const History: React.FC<{ history: HistoryEntry[]; clearHistory: () => void }> =
 const App: React.FC = () => {
     const [activeView, setActiveView] = useState<'dashboard' | 'codes' | 'history'>('dashboard');
     const [history, setHistory] = useState<HistoryEntry[]>([]);
+    const [apiKey, setApiKey] = useState<string | null>(null);
+    const [showApiKeyPrompt, setShowApiKeyPrompt] = useState<boolean>(false);
+    const [apiKeyInput, setApiKeyInput] = useState('');
+    const API_KEY_STORAGE_KEY = 'tm-car-diag-api-key';
 
     useEffect(() => {
         try {
             const storedHistory = localStorage.getItem('diagnosticHistory');
             if (storedHistory) setHistory(JSON.parse(storedHistory));
-        } catch (error) { console.error("Failed to load history", error); }
+
+            const key = localStorage.getItem(API_KEY_STORAGE_KEY) || process.env.API_KEY;
+            if (key) {
+                setApiKey(key);
+            } else {
+                setShowApiKeyPrompt(true);
+            }
+        } catch (error) { 
+            console.error("Initialization error:", error); 
+            setShowApiKeyPrompt(true);
+        }
     }, []);
+
+    const handleSaveApiKey = () => {
+        if (apiKeyInput.trim()) {
+            const key = apiKeyInput.trim();
+            setApiKey(key);
+            try {
+                localStorage.setItem(API_KEY_STORAGE_KEY, key);
+                setShowApiKeyPrompt(false);
+            } catch (e) {
+                console.error("Failed to save API key", e);
+                alert("Could not save API Key. Local storage might be full or disabled.");
+            }
+        }
+    };
 
     const updateHistory = (newEntry: HistoryEntry) => {
         setHistory(prev => {
@@ -367,15 +403,46 @@ const App: React.FC = () => {
     
     const renderView = () => {
         switch (activeView) {
-            case 'codes': return <CodeMeanings />;
+            case 'codes': return <CodeMeanings apiKey={apiKey} />;
             case 'history': return <History history={history} clearHistory={clearHistory} />;
-            default: return <Dashboard onNewReport={updateHistory} />;
+            default: return <Dashboard onNewReport={updateHistory} apiKey={apiKey} />;
         }
     };
 
     return (
         <div className="min-h-screen bg-slate-900 text-slate-100 font-sans">
             <style>{`@keyframes fade-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } } .animate-fade-in { animation: fade-in 0.5s ease-out forwards; }`}</style>
+            
+            {showApiKeyPrompt && (
+                <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+                    <div className="bg-slate-800 border border-slate-700 rounded-lg p-6 sm:p-8 max-w-md w-full text-center shadow-2xl animate-fade-in">
+                        <KeyIcon className="w-12 h-12 text-yellow-400 mx-auto mb-4" />
+                        <h2 className="text-2xl font-bold text-slate-100 mb-2">Enter Your Gemini API Key</h2>
+                        <p className="text-slate-400 mb-6">
+                            This app requires a Google Gemini API key. Your key is stored securely in your browser's local storage.
+                        </p>
+                        <input
+                            type="password"
+                            value={apiKeyInput}
+                            onChange={(e) => setApiKeyInput(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleSaveApiKey()}
+                            placeholder="Enter your API key"
+                            className="w-full text-center p-3 bg-slate-900 border-2 border-slate-600 rounded-lg focus:ring-2 focus:ring-cyan-500 mb-4"
+                        />
+                        <button
+                            onClick={handleSaveApiKey}
+                            className="w-full bg-cyan-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-cyan-600 disabled:opacity-50 transition-colors"
+                            disabled={!apiKeyInput.trim()}
+                        >
+                            Save and Continue
+                        </button>
+                        <p className="text-xs text-slate-500 mt-4">
+                            Don't have a key? Get one from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">Google AI Studio</a>.
+                        </p>
+                    </div>
+                </div>
+            )}
+
             <Sidebar activeView={activeView} setActiveView={setActiveView} />
             <main className="flex-1 sm:ml-64 p-4 sm:p-6 lg:p-8 pb-24 sm:pb-6">
                 {renderView()}

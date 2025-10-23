@@ -1,27 +1,11 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import type { DiagnosticReport, DTCCodeMeaning } from '../types';
 
-/**
- * Retrieves the API key from environment variables and throws a detailed error if not found.
- * This helps users diagnose configuration issues in deployment environments like Vercel.
- * @returns The API key string.
- */
-const getApiKey = (): string => {
-    const apiKey = process.env.API_KEY;
+const getCarDiagnostic = async (problemDescription: string, apiKey: string): Promise<DiagnosticReport> => {
     if (!apiKey) {
-        throw new Error(
-            "API_KEY environment variable not set. This application requires a valid Gemini API key to function. " +
-            "Please ensure the API_KEY is correctly configured in your deployment environment (e.g., Vercel, Netlify). " +
-            "The key must be available as 'process.env.API_KEY' to the application."
-        );
+        throw new Error("API Key is missing. Please provide a valid API key to continue.");
     }
-    return apiKey;
-};
-
-
-const getCarDiagnostic = async (problemDescription: string): Promise<DiagnosticReport> => {
-    const ai = new GoogleGenAI({ apiKey: getApiKey() });
+    const ai = new GoogleGenAI({ apiKey });
 
     const systemInstruction = `You are an expert car mechanic AI. Your task is to analyze the user's description of a car problem and provide a detailed diagnosis. 
     If the user provides OBD-II fault codes (e.g., P0300, C0121), prioritize diagnosing based on those codes as they are the most critical data.
@@ -97,12 +81,15 @@ const getCarDiagnostic = async (problemDescription: string): Promise<DiagnosticR
 
     } catch (error) {
         console.error("Error fetching or parsing car diagnostic:", error);
-        throw new Error("Failed to get a valid diagnosis from the AI. The model may have returned an unexpected format.");
+        throw new Error("Failed to get a valid diagnosis from the AI. This could be due to an invalid API key or network issue.");
     }
 };
 
-const getDTCMeaning = async (code: string): Promise<DTCCodeMeaning> => {
-    const ai = new GoogleGenAI({ apiKey: getApiKey() });
+const getDTCMeaning = async (code: string, apiKey: string): Promise<DTCCodeMeaning> => {
+    if (!apiKey) {
+        throw new Error("API Key is missing. Please provide a valid API key to continue.");
+    }
+    const ai = new GoogleGenAI({ apiKey });
 
     const systemInstruction = `You are an expert automotive technician AI. Your task is to provide a detailed explanation for the given OBD-II Diagnostic Trouble Code (DTC).
     You must respond ONLY with a valid JSON object that adheres to the provided schema. Do not include any introductory text, markdown formatting, or any content outside of the JSON structure.`;
@@ -143,7 +130,7 @@ const getDTCMeaning = async (code: string): Promise<DTCCodeMeaning> => {
         return meaningData;
     } catch (error) {
         console.error("Error fetching or parsing DTC meaning:", error);
-        throw new Error("Failed to get a valid explanation for the code. Please check the code format (e.g., P0300).");
+        throw new Error("Failed to get an explanation. Please check the code format and your API key.");
     }
 };
 

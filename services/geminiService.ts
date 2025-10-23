@@ -2,12 +2,26 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import type { DiagnosticReport, DTCCodeMeaning } from '../types';
 
-const getCarDiagnostic = async (problemDescription: string): Promise<DiagnosticReport> => {
-    if (!process.env.API_KEY) {
-        throw new Error("API_KEY environment variable not set");
+/**
+ * Retrieves the API key from environment variables and throws a detailed error if not found.
+ * This helps users diagnose configuration issues in deployment environments like Vercel.
+ * @returns The API key string.
+ */
+const getApiKey = (): string => {
+    const apiKey = process.env.API_KEY;
+    if (!apiKey) {
+        throw new Error(
+            "API_KEY environment variable not set. This application requires a valid Gemini API key to function. " +
+            "Please ensure the API_KEY is correctly configured in your deployment environment (e.g., Vercel, Netlify). " +
+            "The key must be available as 'process.env.API_KEY' to the application."
+        );
     }
+    return apiKey;
+};
 
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+const getCarDiagnostic = async (problemDescription: string): Promise<DiagnosticReport> => {
+    const ai = new GoogleGenAI({ apiKey: getApiKey() });
 
     const systemInstruction = `You are an expert car mechanic AI. Your task is to analyze the user's description of a car problem and provide a detailed diagnosis. 
     If the user provides OBD-II fault codes (e.g., P0300, C0121), prioritize diagnosing based on those codes as they are the most critical data.
@@ -88,11 +102,7 @@ const getCarDiagnostic = async (problemDescription: string): Promise<DiagnosticR
 };
 
 const getDTCMeaning = async (code: string): Promise<DTCCodeMeaning> => {
-    if (!process.env.API_KEY) {
-        throw new Error("API_KEY environment variable not set");
-    }
-
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ai = new GoogleGenAI({ apiKey: getApiKey() });
 
     const systemInstruction = `You are an expert automotive technician AI. Your task is to provide a detailed explanation for the given OBD-II Diagnostic Trouble Code (DTC).
     You must respond ONLY with a valid JSON object that adheres to the provided schema. Do not include any introductory text, markdown formatting, or any content outside of the JSON structure.`;
